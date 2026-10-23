@@ -51,9 +51,9 @@ Se você exportou o projeto localmente, o binário também fica em
 
 ### Exportar novamente
 
-Os templates oficiais do Godot **4.7.2** já estão instalados em
-`~/.local/share/godot/export_templates/4.7.2.stable/` e o preset **Linux**
-está em `export_presets.cfg`. Para regerar o binário:
+Instale os templates oficiais do **Godot 4.7.2** pelo editor
+(**Editor → Gerenciar Templates de Exportação**). O preset **Linux** está em
+`export_presets.cfg`. Para regerar o binário:
 
 ```bash
 godot --headless --path . --export-release "Linux" build/tux-obby.x86_64
