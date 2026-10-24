@@ -2,9 +2,10 @@ extends Node
 ## Teste automatizado de jogabilidade. Roda sem interface:
 ## godot --headless --path . --scene res://tools/test_game.tscn
 ## Verifica movimento, pulo duplo, morte/respawn, checkpoints, peixes,
-## trampolim, plataformas móveis, pausa, vitória e áudio.
+## trampolim, plataformas móveis, pausa, vitória, áudio, os 4 níveis e o menu de níveis.
 
 const SAVE_PATH := "user://tux_obby.cfg"
+const Catalog := preload("res://scripts/level_catalog.gd")
 
 var main: Node3D
 var failures := 0
@@ -33,8 +34,11 @@ func _ready() -> void:
 	add_child(main)
 	await get_tree().process_frame
 	await get_tree().create_timer(0.4).timeout
+	main._load_level(1)
+	main.hud.show_start(main.best_time)
 
 	_test_menu()
+	await _test_levels()
 	await _test_start()
 	await _test_input_map()
 	await _test_movement()
@@ -48,6 +52,7 @@ func _ready() -> void:
 	await _test_vanishing_platform()
 	await _test_audio()
 	await _test_finish()
+	await _test_level_menu_flow()
 
 	print("----------------------------------")
 	print("VERIFICACOES: %d | FALHAS: %d" % [checks, failures])
@@ -237,6 +242,7 @@ func _test_pause() -> void:
 	check(main.state == main.State.PAUSED, "estado PAUSED")
 	check(get_tree().paused, "arvore pausada")
 	check(main.hud.pause_overlay.visible, "overlay de pausa visivel")
+	check(_has_text(main.hud.pause_overlay, "ESCOLHER NÍVEL"), "pausa oferece escolher outro nivel")
 	check(is_equal_approx(main.elapsed, elapsed_before), "cronometro parado na pausa")
 	main.resume_game()
 	await get_tree().create_timer(0.2).timeout
@@ -334,8 +340,88 @@ func _test_finish() -> void:
 	await get_tree().create_timer(0.5).timeout
 	check(main.state == main.State.WON, "entrar no portal vence a partida")
 	check(main.hud.win_overlay.visible, "tela de vitoria visivel")
+	check(_has_text(main.hud.win_overlay, "ESCOLHER NÍVEL"), "vitoria oferece escolher outro nivel")
+	check(_has_text(main.hud.win_overlay, "NÍVEL 1 · Ilhas de Lava"), "vitoria mostra o nivel concluido")
 	check(main.best_time > 0.0, "melhor tempo registrado (%.2f s)" % main.best_time)
 	check(main.player.frozen, "jogador congelado na vitoria")
+
+
+
+func _test_levels() -> void:
+	print("\n-- Niveis --")
+	check(Catalog.LEVELS.size() == 4, "catalogo tem 4 niveis")
+	check(main.hud._level_buttons.size() == 4, "menu tem 4 cartoes de nivel")
+	main.hud.show_levels()
+	await get_tree().process_frame
+	check(main.hud.level_overlay.visible, "menu de niveis abre")
+	check(not main.hud.start_overlay.visible, "menu inicial some ao abrir niveis")
+	check(_has_text(main.hud.level_overlay, "ESCOLHA O NÍVEL"), "titulo do menu de niveis em portugues")
+	check(_has_text(main.hud.level_overlay, "Picos Congelados"), "nivel 2 aparece no menu")
+	check(_has_text(main.hud.level_overlay, "Tempestade"), "nivel 3 aparece no menu")
+	check(_has_text(main.hud.level_overlay, "Coração do Vazio"), "nivel 4 aparece no menu")
+	Loc.set_locale("en")
+	check(_has_text(main.hud.level_overlay, "SELECT A LEVEL"), "menu de niveis em ingles")
+	check(Loc.t("level_2_name") == "Frozen Peaks", "nome do nivel 2 em ingles")
+	check(Loc.t("pause_levels") == "SELECT LEVEL", "botao de niveis da pausa em ingles")
+	Loc.set_locale("es")
+	check(_has_text(main.hud.level_overlay, "ELIGE UN NIVEL"), "menu de niveis em espanhol")
+	check(Loc.t("level_4_name") == "Corazón del Vacío", "nome do nivel 4 em espanhol")
+	check(Loc.t("win_levels") == "ELEGIR NIVEL", "botao de niveis da vitoria em espanhol")
+	Loc.set_locale("pt_BR")
+	check(_has_text(main.hud.level_overlay, "ESCOLHA O NÍVEL"), "menu de niveis volta ao portugues")
+	main.hud.hide_levels()
+	await get_tree().process_frame
+	check(main.hud.start_overlay.visible, "voltar fecha o menu de niveis")
+
+	for level_id in [2, 3, 4]:
+		var entry := Catalog.get_level(level_id)
+		main._load_level(level_id)
+		await get_tree().process_frame
+		check(main.current_level_id == level_id, "nivel %d carregado" % level_id)
+		check(main.level.total_fish == int(entry["fish"]), "nivel %d tem %d peixes (tem %d)" % [level_id, int(entry["fish"]), main.level.total_fish])
+		check(main.level.checkpoint_spawns.size() - 1 == int(entry["checkpoints"]), "nivel %d tem %d checkpoints" % [level_id, int(entry["checkpoints"])])
+		check(_has_finish(main.level), "nivel %d tem portal de chegada" % level_id)
+		check(main.hud.current_level_label.text.contains(Loc.t(str(entry["name"]))), "menu mostra o nome do nivel %d" % level_id)
+		check(main.hud.fish_label.text == Loc.t("hud_fish", [0, int(entry["fish"])]), "HUD do nivel %d com peixes corretos" % level_id)
+		if level_id == 2:
+			var settings := ConfigFile.new()
+			var settings_ok := settings.load(Loc.SETTINGS_PATH) == OK
+			check(settings_ok and int(settings.get_value("ui", "level", 0)) == 2, "nivel escolhido fica salvo nas configuracoes")
+
+	main._load_level(1)
+	await get_tree().process_frame
+	check(main.current_level_id == 1, "nivel 1 restaurado apos os testes")
+	check(main.level.total_fish == 26, "nivel 1 continua com 26 peixes")
+	check(_has_text(main.level, "1  AQUECIMENTO"), "placa do nivel 1 em portugues apos troca")
+	var l1_best := float(main.level_best_times.get(1, 0.0))
+	var l2_best := float(main.level_best_times.get(2, 0.0))
+	check(l1_best <= 0.0 or main.hud._level_best_labels[1].text.begins_with("Recorde:"), "cartao do nivel 1 mostra recorde quando existe")
+	check(l2_best > 0.0 or main.hud._level_best_labels[2].text == "Sem recorde", "cartao do nivel 2 sem recorde quando nao ha recorde")
+
+
+func _test_level_menu_flow() -> void:
+	print("\n-- Fluxo do menu de niveis --")
+	main.return_to_levels()
+	await get_tree().process_frame
+	check(main.state == main.State.MENU, "voltar aos niveis coloca o jogo em MENU")
+	check(main.hud.level_overlay.visible, "overlay de niveis visivel apos a vitoria")
+	check(main.player.frozen, "jogador congelado no menu de niveis")
+	check(main.player.global_position.distance_to(main.level.start_spawn) < 0.5, "voltar aos niveis reposiciona o Tux no inicio")
+	main.hud._level_buttons[2].pressed.emit()
+	await get_tree().create_timer(0.35).timeout
+	check(main.current_level_id == 2, "cartao do nivel 2 inicia o nivel 2")
+	check(main.state == main.State.PLAYING, "jogo comeca ao escolher um cartao")
+	check(main.level.total_fish == 18, "nivel 2 escolhido tem 18 peixes")
+	check(main.hud.fish_label.text == Loc.t("hud_fish", [0, 18]), "HUD atualiza para o nivel 2")
+
+
+func _has_finish(root: Node) -> bool:
+	for child in root.get_children():
+		if child is FinishGate:
+			return true
+		if _has_finish(child):
+			return true
+	return false
 
 
 func _find_fish(root: Node) -> Array[Node3D]:

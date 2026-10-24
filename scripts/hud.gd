@@ -1,11 +1,15 @@
 extends CanvasLayer
 class_name Hud
+
+const Catalog := preload("res://scripts/level_catalog.gd")
 ## Interface do jogo: HUD, menu inicial, pausa e tela de vitória.
 
 signal play_pressed
 signal resume_pressed
 signal restart_pressed
 signal quit_pressed
+signal levels_pressed
+signal level_chosen(level_id: int)
 
 const FONT_REG: FontFile = preload("res://assets/fonts/LiberationSans-Regular.ttf")
 const FONT_BOLD: FontFile = preload("res://assets/fonts/LiberationSans-Bold.ttf")
@@ -28,11 +32,14 @@ var hint_label: Label
 var start_overlay: Control
 var pause_overlay: Control
 var win_overlay: Control
+var level_overlay: Control
 var win_time_label: Label
 var win_deaths_label: Label
 var win_fish_label: Label
 var win_record_label: Label
 var start_best_label: Label
+var current_level_label: Label
+var win_level_label: Label
 var _flash: ColorRect
 var _fade: ColorRect
 var _notify_tween: Tween
@@ -40,6 +47,11 @@ var _root: Control
 var _left_panel: PanelContainer
 var _right_panel: PanelContainer
 var _lang_buttons: Dictionary = {}
+var _level_buttons: Dictionary = {}
+var _level_best_labels: Dictionary = {}
+var _level_best_values: Dictionary = {}
+var _selected_level := 1
+var _selected_level_name_key := "level_1_name"
 var _time_value := 0.0
 var _deaths_value := 0
 var _fish_value := 0
@@ -133,10 +145,12 @@ func _build() -> void:
 	_build_start_overlay()
 	_build_pause_overlay()
 	_build_win_overlay()
+	_build_level_overlay()
 
 	start_overlay.visible = false
 	pause_overlay.visible = false
 	win_overlay.visible = false
+	level_overlay.visible = false
 
 
 func _build_start_overlay() -> void:
@@ -169,6 +183,12 @@ func _build_start_overlay() -> void:
 	for entry in [["pt_BR", "PORTUGUÊS"], ["en", "ENGLISH"], ["es", "ESPAÑOL"]]:
 		_lang_button(lang_row, entry[1], entry[0])
 	_update_language_buttons()
+	var lang_spacer := Control.new()
+	lang_spacer.custom_minimum_size = Vector2(10, 0)
+	lang_spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lang_row.add_child(lang_spacer)
+	var levels_button := _chip_button(lang_row, Loc.t("menu_levels"), func() -> void: show_levels())
+	Loc.bind_text(levels_button, "menu_levels")
 
 	_box_gap(box, 10)
 	var grid := GridContainer.new()
@@ -183,7 +203,10 @@ func _build_start_overlay() -> void:
 	_control_row(grid, "key_r", "menu_controls_checkpoint")
 	_control_row(grid, "key_esc", "menu_controls_pause")
 
-	_box_gap(box, 12)
+	_box_gap(box, 8)
+	current_level_label = _label(box, "", 14, TEAL, true)
+	current_level_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_box_gap(box, 6)
 	var play := _button(box, Loc.t("menu_play"), func() -> void: play_pressed.emit())
 	Loc.bind_text(play, "menu_play")
 	play.add_theme_font_size_override("font_size", 26)
@@ -221,6 +244,9 @@ func _build_pause_overlay() -> void:
 	var restart := _button(box, Loc.t("pause_restart"), func() -> void: restart_pressed.emit())
 	Loc.bind_text(restart, "pause_restart")
 	restart.add_theme_font_size_override("font_size", 22)
+	var levels := _button(box, Loc.t("pause_levels"), func() -> void: levels_pressed.emit())
+	Loc.bind_text(levels, "pause_levels")
+	levels.add_theme_font_size_override("font_size", 20)
 	var quit := _button(box, Loc.t("pause_quit"), func() -> void: quit_pressed.emit())
 	Loc.bind_text(quit, "pause_quit")
 	quit.add_theme_font_size_override("font_size", 22)
@@ -246,6 +272,8 @@ func _build_win_overlay() -> void:
 	var subtitle := _label(box, Loc.t("win_subtitle"), 16, MUTED)
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	Loc.bind_text(subtitle, "win_subtitle")
+	win_level_label = _label(box, "", 14, TEAL, true)
+	win_level_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_box_gap(box, 14)
 
 	var stats := GridContainer.new()
@@ -263,12 +291,161 @@ func _build_win_overlay() -> void:
 	var again := _button(box, Loc.t("win_again"), func() -> void: restart_pressed.emit())
 	Loc.bind_text(again, "win_again")
 	again.add_theme_font_size_override("font_size", 24)
+	var levels := _button(box, Loc.t("win_levels"), func() -> void: levels_pressed.emit())
+	Loc.bind_text(levels, "win_levels")
+	levels.add_theme_font_size_override("font_size", 20)
 	var quit := _button(box, Loc.t("win_quit"), func() -> void: quit_pressed.emit())
 	Loc.bind_text(quit, "win_quit")
 	quit.add_theme_font_size_override("font_size", 20)
 	var hint := _label(box, Loc.t("win_hint"), 14, MUTED)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	Loc.bind_text(hint, "win_hint")
+
+
+func _build_level_overlay() -> void:
+	var overlay := _overlay()
+	level_overlay = overlay
+	var panel := _center_panel(overlay, Vector2(880, 0))
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 8)
+	panel.add_child(box)
+
+	var kicker := _label(box, Loc.t("levels_kicker"), 13, TEAL, true)
+	kicker.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	Loc.bind_text(kicker, "levels_kicker")
+	var title := _label(box, Loc.t("levels_title"), 46, CREAM, true, 10)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	Loc.bind_text(title, "levels_title")
+	var subtitle := _label(box, Loc.t("levels_subtitle"), 15, MUTED)
+	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	Loc.bind_text(subtitle, "levels_subtitle")
+	_box_gap(box, 8)
+
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 14)
+	grid.add_theme_constant_override("v_separation", 14)
+	box.add_child(grid)
+	for entry in Catalog.LEVELS:
+		_level_card(grid, entry)
+
+	_box_gap(box, 8)
+	var back := _button(box, Loc.t("levels_back"), func() -> void: hide_levels())
+	Loc.bind_text(back, "levels_back")
+	back.add_theme_font_size_override("font_size", 18)
+	back.custom_minimum_size = Vector2(0, 42)
+
+
+func _level_card(parent: GridContainer, entry: Dictionary) -> void:
+	var level_id := int(entry["id"])
+	var accent: Color = entry["accent"]
+	var button := Button.new()
+	button.text = ""
+	button.custom_minimum_size = Vector2(370, 158)
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	button.focus_mode = Control.FOCUS_NONE
+	button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	button.tooltip_text = Loc.t("level_play_tooltip", [level_id])
+	_style_level_card(button, accent)
+	button.pressed.connect(func() -> void: _on_level_card_pressed(level_id))
+	parent.add_child(button)
+	_level_buttons[level_id] = button
+
+	var margin := MarginContainer.new()
+	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for side in ["left", "right", "top", "bottom"]:
+		margin.add_theme_constant_override("margin_%s" % side, 18)
+	button.add_child(margin)
+
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 2)
+	margin.add_child(box)
+
+	var top := HBoxContainer.new()
+	box.add_child(top)
+	var number := _label(top, "%02d" % level_id, 26, accent, true, 4)
+	number.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var stars := _label(top, _difficulty_text(int(entry["difficulty"])), 14, accent, true, 2)
+	stars.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+
+	var name_label := _label(box, Loc.t(str(entry["name"])), 21, CREAM, true, 3)
+	Loc.bind_text(name_label, str(entry["name"]))
+	var tagline := _label(box, Loc.t(str(entry["tagline"])), 13, MUTED)
+	Loc.bind_text(tagline, str(entry["tagline"]))
+	var stats := _label(box, "", 12, MUTED)
+	Loc.bind_text(stats, "level_stats", [int(entry["checkpoints"]), int(entry["fish"])])
+	_box_gap(box, 4)
+	var best := _label(box, Loc.t("level_no_record"), 13, accent, true, 3)
+	_level_best_labels[level_id] = best
+
+
+func _difficulty_text(difficulty: int) -> String:
+	var filled := clampi(difficulty, 0, 4)
+	return "★".repeat(filled) + "☆".repeat(4 - filled)
+
+
+func _on_level_card_pressed(level_id: int) -> void:
+	level_overlay.visible = false
+	level_chosen.emit(level_id)
+
+
+func _chip_button(parent: Node, text: String, callback: Callable) -> Button:
+	var button := Button.new()
+	button.text = text
+	button.custom_minimum_size = Vector2(0, 30)
+	button.add_theme_font_override("font", FONT_BOLD)
+	button.add_theme_font_size_override("font_size", 12)
+	button.focus_mode = Control.FOCUS_NONE
+	button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = Color(0.09, 0.16, 0.19, 0.95)
+	normal.border_color = Color(0.55, 1.0, 0.9, 0.55)
+	normal.set_border_width_all(1)
+	normal.set_corner_radius_all(9)
+	normal.content_margin_left = 12
+	normal.content_margin_right = 12
+	normal.content_margin_top = 4
+	normal.content_margin_bottom = 4
+	var hover := normal.duplicate() as StyleBoxFlat
+	hover.bg_color = Color(0.13, 0.24, 0.25, 1.0)
+	hover.border_color = TEAL
+	var pressed := normal.duplicate() as StyleBoxFlat
+	pressed.bg_color = Color(0.06, 0.12, 0.14, 1.0)
+	button.add_theme_stylebox_override("normal", normal)
+	button.add_theme_stylebox_override("hover", hover)
+	button.add_theme_stylebox_override("pressed", pressed)
+	button.add_theme_stylebox_override("focus", hover)
+	button.add_theme_color_override("font_color", TEAL)
+	button.add_theme_color_override("font_hover_color", CREAM)
+	button.add_theme_color_override("font_pressed_color", CREAM)
+	button.pressed.connect(callback)
+	parent.add_child(button)
+	return button
+
+
+func _style_level_card(button: Button, accent: Color) -> void:
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = Color(0.055, 0.07, 0.115, 0.96)
+	normal.border_color = Color(accent.r, accent.g, accent.b, 0.5)
+	normal.set_border_width_all(1)
+	normal.set_corner_radius_all(16)
+	normal.content_margin_left = 0
+	normal.content_margin_right = 0
+	normal.content_margin_top = 0
+	normal.content_margin_bottom = 0
+	var hover := normal.duplicate() as StyleBoxFlat
+	hover.bg_color = Color(0.08, 0.105, 0.165, 1.0)
+	hover.border_color = accent
+	hover.set_border_width_all(2)
+	var pressed := normal.duplicate() as StyleBoxFlat
+	pressed.bg_color = Color(0.045, 0.06, 0.10, 1.0)
+	pressed.border_color = accent.lightened(0.25)
+	pressed.set_border_width_all(2)
+	button.add_theme_stylebox_override("normal", normal)
+	button.add_theme_stylebox_override("hover", hover)
+	button.add_theme_stylebox_override("pressed", pressed)
+	button.add_theme_stylebox_override("focus", hover)
 
 
 func _add_stat_row(grid: GridContainer, key: String) -> void:
@@ -443,6 +620,40 @@ func set_best(seconds: float) -> void:
 	start_best_label.text = Loc.t("menu_best", [text])
 
 
+func set_level(level_id: int, name_key: String) -> void:
+	_selected_level = level_id
+	_selected_level_name_key = name_key
+	_update_level_texts()
+
+
+func set_level_records(bests: Dictionary) -> void:
+	_level_best_values = bests.duplicate()
+	_update_level_records()
+
+
+func _update_level_texts() -> void:
+	if current_level_label:
+		current_level_label.text = Loc.t("menu_current_level", [_selected_level, Loc.t(_selected_level_name_key)])
+	if win_level_label:
+		win_level_label.text = Loc.t("win_level", [_selected_level, Loc.t(_selected_level_name_key)])
+	for level_id in _level_buttons:
+		var button: Button = _level_buttons[level_id]
+		if is_instance_valid(button):
+			button.tooltip_text = Loc.t("level_play_tooltip", [level_id])
+
+
+func _update_level_records() -> void:
+	for level_id in _level_best_labels:
+		var label: Label = _level_best_labels[level_id]
+		if not is_instance_valid(label):
+			continue
+		var seconds := float(_level_best_values.get(level_id, 0.0))
+		if seconds <= 0.0:
+			label.text = Loc.t("level_no_record")
+		else:
+			label.text = Loc.t("level_record", [format_time(seconds)])
+
+
 func _on_locale_changed(_locale: String) -> void:
 	_update_language_buttons()
 	set_time(_time_value)
@@ -450,6 +661,8 @@ func _on_locale_changed(_locale: String) -> void:
 	set_fish(_fish_value, _fish_total)
 	set_checkpoint(_checkpoint_value, _checkpoint_total)
 	set_best(_best_value)
+	_update_level_texts()
+	_update_level_records()
 	if win_overlay.visible:
 		_apply_win_texts()
 
@@ -460,6 +673,8 @@ func _apply_win_texts() -> void:
 	win_fish_label.text = "%d/%d" % [_win_fish_value, _win_fish_total]
 	win_record_label.text = Loc.t("win_new_record") if _win_new_record else Loc.t("win_best", [format_time(_win_best_value)])
 	win_record_label.add_theme_color_override("font_color", ORANGE if _win_new_record else MUTED)
+	if win_level_label:
+		win_level_label.text = Loc.t("win_level", [_selected_level, Loc.t(_selected_level_name_key)])
 
 
 func _lang_button(parent: Node, text: String, code: String) -> Button:
@@ -539,14 +754,17 @@ func show_start(best: float) -> void:
 	start_overlay.visible = true
 	pause_overlay.visible = false
 	win_overlay.visible = false
+	level_overlay.visible = false
 	hint_label.visible = false
 	_left_panel.visible = false
 	_right_panel.visible = false
 	set_best(best)
+	_update_level_texts()
 
 
 func hide_start() -> void:
 	start_overlay.visible = false
+	level_overlay.visible = false
 	_left_panel.visible = true
 	_right_panel.visible = true
 	hint_label.visible = true
@@ -554,6 +772,29 @@ func hide_start() -> void:
 	var tween := create_tween()
 	tween.tween_interval(9.0)
 	tween.tween_property(hint_label, "modulate:a", 0.0, 1.5)
+
+
+func show_levels() -> void:
+	Sfx.play("click", -14.0)
+	start_overlay.visible = false
+	pause_overlay.visible = false
+	win_overlay.visible = false
+	level_overlay.visible = true
+	_left_panel.visible = false
+	_right_panel.visible = false
+	hint_label.visible = false
+	_update_level_texts()
+	_update_level_records()
+
+
+func hide_levels(return_to_start := true) -> void:
+	level_overlay.visible = false
+	if return_to_start:
+		start_overlay.visible = true
+		_left_panel.visible = false
+		_right_panel.visible = false
+		hint_label.visible = false
+		Sfx.play("click", -14.0)
 
 
 func show_pause() -> void:
@@ -568,6 +809,7 @@ func show_win(time: float, deaths: int, fish: int, total: int, new_record: bool,
 	win_overlay.visible = true
 	pause_overlay.visible = false
 	start_overlay.visible = false
+	level_overlay.visible = false
 	hint_label.visible = false
 	_left_panel.visible = false
 	_right_panel.visible = false

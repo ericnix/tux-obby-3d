@@ -1,9 +1,12 @@
 extends Node3D
+
+const Catalog := preload("res://scripts/level_catalog.gd")
 ## Controla o estado da partida: menu, timer, mortes, checkpoints, pausa e vitória.
 
 enum State { MENU, PLAYING, PAUSED, WON }
 
 const SAVE_PATH := "user://tux_obby.cfg"
+const SETTINGS_PATH := "user://tux_obby_settings.cfg"
 
 @onready var player: TuxPlayer = $Player
 @onready var level: Level = $Level
@@ -18,33 +21,77 @@ var current_checkpoint := 0
 var respawning := false
 var best_time := 0.0
 var auto_pause_enabled := true
+var current_level_id := 1
+var level_best_times: Dictionary = {}
 
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	add_to_group("game")
-	_load_best()
+	_load_records()
+	_load_level(_load_selected_level())
 
-	spawn = level.start_spawn
-	player.global_position = spawn
-	player.camera_rig.reset_view(0.0)
-	player.set_camera_enabled(false)
-	player.set_frozen(true)
 	player.died.connect(_on_player_died)
 
-	hud.set_time(0.0)
-	hud.set_deaths(0)
-	hud.set_fish(0, level.total_fish)
-	hud.set_checkpoint(0, level.checkpoint_spawns.size() - 1)
-	hud.set_best(best_time)
 	hud.show_start(best_time)
 
 	hud.play_pressed.connect(start_game)
 	hud.resume_pressed.connect(resume_game)
 	hud.restart_pressed.connect(restart_level)
 	hud.quit_pressed.connect(quit_game)
+	hud.levels_pressed.connect(return_to_levels)
+	hud.level_chosen.connect(choose_level)
 
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	Sfx.start_music()
+
+
+func _load_level(level_id: int) -> void:
+	current_level_id = clampi(level_id, 1, Catalog.count())
+	level.setup(current_level_id)
+	spawn = level.start_spawn
+	player.respawn(spawn, 0.0)
+	player.set_camera_enabled(false)
+	player.set_frozen(true)
+	elapsed = 0.0
+	deaths = 0
+	fish = 0
+	current_checkpoint = 0
+	respawning = false
+	best_time = float(level_best_times.get(current_level_id, 0.0))
+	hud.set_time(0.0)
+	hud.set_deaths(0)
+	hud.set_fish(0, level.total_fish)
+	hud.set_checkpoint(0, level.checkpoint_spawns.size() - 1)
+	hud.set_best(best_time)
+	hud.set_level(current_level_id, level.level_name_key)
+	hud.set_level_records(level_best_times)
+	_save_selected_level()
+
+
+func choose_level(level_id: int) -> void:
+	if state != State.MENU:
+		return
+	_load_level(level_id)
+	hud.hide_levels(false)
+	start_game()
+
+
+func return_to_levels() -> void:
+	if state != State.PLAYING and state != State.PAUSED and state != State.WON:
+		return
+	get_tree().paused = false
+	_clear_confetti()
+	state = State.MENU
+	respawning = false
+	player.set_frozen(true)
+	player.set_camera_enabled(false)
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	hud.hide_pause()
+	hud.hide_win()
+	_load_level(current_level_id)
+	hud.show_levels()
+	Sfx.unduck_music()
 	Sfx.start_music()
 
 
@@ -63,6 +110,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			pause_game()
 		elif state == State.PAUSED:
 			resume_game()
+		elif state == State.MENU and hud.level_overlay.visible:
+			hud.hide_levels()
 		get_viewport().set_input_as_handled()
 		return
 
@@ -115,6 +164,7 @@ func start_game() -> void:
 	player.unfreeze()
 	Sfx.play("click", -12.0)
 	Sfx.unduck_music()
+	Sfx.start_music()
 
 
 func pause_game() -> void:
@@ -142,9 +192,16 @@ func resume_game() -> void:
 
 
 func restart_level() -> void:
+	if state != State.PLAYING and state != State.PAUSED and state != State.WON:
+		return
 	get_tree().paused = false
 	Sfx.play("click", -10.0)
-	get_tree().reload_current_scene()
+	_clear_confetti()
+	_load_level(current_level_id)
+	state = State.MENU
+	hud.hide_pause()
+	hud.hide_win()
+	start_game()
 
 
 func quit_game() -> void:
@@ -181,8 +238,10 @@ func finish() -> void:
 	var new_record := best_time <= 0.0 or elapsed < best_time
 	if new_record:
 		best_time = elapsed
-		_save_best()
+		level_best_times[current_level_id] = best_time
+		_save_records()
 	hud.set_best(best_time)
+	hud.set_level_records(level_best_times)
 	hud.show_win(elapsed, deaths, fish, level.total_fish, new_record, best_time)
 	hud.fade_black(0.4, 0.0)
 	Sfx.play("win", -3.0)
@@ -230,16 +289,45 @@ func manual_respawn() -> void:
 # Recordes e efeitos
 # --------------------------------------------------------------------------
 
-func _load_best() -> void:
+func _load_selected_level() -> int:
 	var config := ConfigFile.new()
-	if config.load(SAVE_PATH) == OK:
-		best_time = float(config.get_value("records", "best_time", 0.0))
+	if config.load(SETTINGS_PATH) != OK:
+		return 1
+	return clampi(int(config.get_value("ui", "level", 1)), 1, Catalog.count())
 
 
-func _save_best() -> void:
+func _save_selected_level() -> void:
 	var config := ConfigFile.new()
-	config.set_value("records", "best_time", best_time)
-	config.set_value("records", "fish_total", fish)
+	config.load(SETTINGS_PATH)
+	config.set_value("ui", "level", current_level_id)
+	config.save(SETTINGS_PATH)
+
+
+func _record_key(level_id: int) -> String:
+	return "best_time" if level_id == 1 else "best_time_%d" % level_id
+
+
+func _load_records() -> void:
+	level_best_times.clear()
+	var config := ConfigFile.new()
+	if config.load(SAVE_PATH) != OK:
+		return
+	for level_id in Catalog.ids():
+		var value := float(config.get_value("records", _record_key(level_id), 0.0))
+		if value > 0.0:
+			level_best_times[level_id] = value
+
+
+func _save_records() -> void:
+	var config := ConfigFile.new()
+	config.load(SAVE_PATH)
+	for level_id in Catalog.ids():
+		config.set_value("records", _record_key(level_id), float(level_best_times.get(level_id, 0.0)))
+	var legacy_fish := int(config.get_value("records", "fish_total", 0))
+	if current_level_id == 1:
+		legacy_fish = fish
+	config.set_value("records", "fish_total", legacy_fish)
+	config.set_value("records", "fish_total_%d" % current_level_id, fish)
 	config.save(SAVE_PATH)
 
 
@@ -271,7 +359,13 @@ func _confetti() -> void:
 		mat.emission_energy_multiplier = 1.4
 		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		particles.material_override = mat
-		particles.position = Vector3(2.0 + (i - 1.5) * 0.9, 18.2, -168.4)
+		particles.position = player.global_position + Vector3((i - 1.5) * 0.9, 2.0, 0)
+		particles.add_to_group("confetti")
 		add_child(particles)
 		particles.emitting = true
 		get_tree().create_timer(4.0).timeout.connect(particles.queue_free)
+
+
+func _clear_confetti() -> void:
+	for node in get_tree().get_nodes_in_group("confetti"):
+		node.queue_free()

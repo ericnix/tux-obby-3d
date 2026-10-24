@@ -4,17 +4,21 @@
 [![Godot](https://img.shields.io/badge/Godot-4.7-478cbf?logo=godotengine&logoColor=white)](https://godotengine.org)
 
 Um obby/parkour 3D feito em **Godot 4.7** estrelado pelo **Tux**, o pinguim do Linux.
-Atravesse ilhas flutuantes sobre um mar de lava, desvie de obstáculos giratórios,
-suba de trampolim e colete os 26 peixinhos espalhados pelo caminho.
+Atravesse quatro percursos flutuantes sobre o vazio, desvie de obstáculos
+giratórios, suba de trampolim e colete os peixinhos espalhados pelo caminho.
 
 O jogo está disponível em **português (Brasil), inglês e espanhol**. Escolha o
-idioma no menu inicial; a preferência fica salva entre partidas.
+idioma e o nível no menu inicial; as duas preferências ficam salvas entre
+partidas. Cada nível tem checkpoints, peixinhos e recorde próprios.
 
 Tudo no jogo é gerado em tempo de execução com primitivas 3D: não há modelos,
-texturas ou músicas externas. O visual é um pôr do sol alaranjado com lava escura,
-plataformas pastel e um planeta gigante no horizonte.
+texturas ou músicas externas. Cada percurso tem um tema visual: ilhas de lava,
+picos congelados, tempestade e o coração do vazio. O cenário de fundo mantém um
+pôr do sol alaranjado, com planetas, partículas e ilhas distantes.
 
 ![Gameplay do Tux Obby 3D](docs/screenshot.png)
+
+![Menu de níveis](docs/levels.png)
 
 ![Tux, o pinguim](docs/tux.png)
 
@@ -32,8 +36,9 @@ godot --path /caminho/para/tux-obby
 # ou abra o Godot, clique em "Importar" e selecione project.godot
 ```
 
-O jogo abre no menu inicial. Escolha o idioma no seletor **IDIOMA / LANGUAGE**
-e clique em **JOGAR** ou aperte **ENTER**.
+O jogo abre no menu inicial. Escolha o idioma no seletor **IDIOMA / LANGUAGE**,
+abra **NÍVEIS** para escolher o percurso e clique em **JOGAR** ou aperte **ENTER**.
+O menu de níveis também pode ser aberto pela pausa ou pela tela de vitória.
 
 ### Baixar o executável
 
@@ -73,30 +78,30 @@ godot --headless --path . --export-release "Linux" build/tux-obby.x86_64
 
 ## Objetivo
 
-- Atravessar as 7 seções do percurso e entrar no portal **META**.
-- Passar pelos **5 checkpoints**: ao encostar na bandeira, ela vira o novo ponto
-  de renascimento.
-- Coletar os **26 peixinhos**. Eles ficam escondidos em plataformas móveis,
-  passagens altas e cantos do cenário.
-- Terminar no menor tempo possível. O melhor tempo fica salvo entre partidas em
+- Escolher um dos **4 níveis** no menu **NÍVEIS** e entrar no portal **META**.
+- Passar pelos **5 checkpoints** de cada nível: ao encostar na bandeira, ela vira
+  o novo ponto de renascimento.
+- Coletar os peixinhos de cada percurso. Eles ficam escondidos em plataformas
+  móveis, passagens altas e cantos do cenário.
+- Terminar no menor tempo possível. Cada nível guarda o seu próprio recorde em
   `user://tux_obby.cfg` (na pasta de dados do usuário do Godot).
-- O idioma escolhido no menu fica salvo em `user://tux_obby_settings.cfg`.
+- O idioma e o nível escolhidos ficam salvos em `user://tux_obby_settings.cfg`.
 
 Cair no vazio conta uma queda e devolve o Tux ao último checkpoint. O cronômetro
 pausa durante a animação de respawn.
 
-## Seções
+## Níveis
 
-| Seção | Cor | Desafio |
-| --- | --- | --- |
-| Início | areia | plataforma segura, peixe introdutório |
-| 1 · Aquecimento | verde-água | saltos simples entre ilhas |
-| 2 | roxo | ponte estreita com barra giratória mortal |
-| 3 | vermelho | balsas móveis sobre a lava |
-| 4 | amarelo | plataformas que piscam e desaparecem |
-| 5 | azul | trampolim e elevador vertical |
-| 6 | rosa | pilares cada vez mais altos |
-| 7 | verde-limão | discos giratórios e balsa final até a meta |
+| Nº | Nome | Tema | Desafio | Checkpoints | Peixes |
+| --- | --- | --- | --- | --- | --- |
+| 1 | Ilhas de Lava | lava alaranjada | percurso clássico com balsas, trampolim e discos | 5 | 26 |
+| 2 | Picos Congelados | gelo azul e neve | subida com gelo que desaparece, trampolins e elevadores | 5 | 18 |
+| 3 | Tempestade | roxo e relâmpagos | spinners rápidos, balsas e plataformas instáveis | 5 | 20 |
+| 4 | Coração do Vazio | rosa neon e fragmentos | saltos curtos, plataformas giratórias e elevadores | 5 | 16 |
+
+Cada nível tem 7 seções, 5 checkpoints e um portal de chegada. O nível 1 mantém
+o percurso original; os níveis 2 a 4 foram construídos com a mesma gramática de
+movimento, mas com layouts, paletas e obstáculos próprios.
 
 ## Estrutura do projeto
 
@@ -110,11 +115,12 @@ scenes/
   player.tscn              CharacterBody3D + modelo do Tux + câmera
 scripts/
   main.gd                  estado da partida, timer, mortes, pausa, vitória, save
-  level.gd                 construção de todo o percurso e do cenário
+  level_catalog.gd         metadados dos 4 níveis (nome, tema, peixes, recorde)
+  level.gd                 construção dos 4 percursos e do cenário
   player.gd                movimento, coyote time, buffer de pulo, pulo duplo
   tux_model.gd             Tux procedural + animações (andar, piscar, pulo duplo)
   camera_rig.gd            câmera orbital em terceira pessoa com colisão
-  hud.gd                   HUD, menu, pausa e tela de vitória
+  hud.gd                   HUD, menu, seleção de nível, pausa e vitória
   loc.gd                   textos em pt-BR, inglês e espanhol + preferência salva
   sfx.gd                   pool de efeitos + trilha em loop (autoload)
   obstacle_kit.gd          utilitários de geometria e materiais
@@ -135,9 +141,9 @@ tools/
 
 ## Testes
 
-Teste automatizado (107 verificações: movimento, pulo duplo, morte/respawn,
-checkpoints, peixes, pausa, trampolim, plataformas, áudio, vitória e os três
-idiomas):
+Teste automatizado (158 verificações: movimento, pulo duplo, morte/respawn,
+checkpoints, peixes, pausa, trampolim, plataformas, áudio, vitória, os quatro
+níveis, o menu de níveis e os três idiomas):
 
 ```bash
 godot --headless --path . --scene res://tools/test_game.tscn --audio-driver Dummy
