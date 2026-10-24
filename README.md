@@ -99,9 +99,9 @@ pausa durante a animação de respawn.
 | 3 | Tempestade | roxo e relâmpagos | spinners rápidos, balsas e plataformas instáveis | 5 | 20 |
 | 4 | Coração do Vazio | rosa neon e fragmentos | saltos curtos, plataformas giratórias e elevadores | 5 | 16 |
 
-Cada nível tem 7 seções, 5 checkpoints e um portal de chegada. O nível 1 mantém
-o percurso original; os níveis 2 a 4 foram construídos com a mesma gramática de
-movimento, mas com layouts, paletas e obstáculos próprios.
+Cada nível tem 5 checkpoints, vários trechos e um portal de chegada. O nível 1
+mantém o percurso original; os níveis 2 a 4 foram construídos com a mesma
+gramática de movimento, mas com layouts, paletas e obstáculos próprios.
 
 ## Estrutura do projeto
 
