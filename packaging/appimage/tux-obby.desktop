@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Tux Obby 3D
+Comment=Obby 3D com Tux, o pinguim do Linux
+Exec=tux-obby
+Icon=tux-obby
+Categories=Game;ArcadeGame;
+Terminal=false
+StartupWMClass=Tux Obby 3D

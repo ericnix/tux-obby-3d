@@ -40,29 +40,45 @@ O jogo abre no menu inicial. Escolha o idioma no seletor **IDIOMA / LANGUAGE**,
 abra **NÍVEIS** para escolher o percurso e clique em **JOGAR** ou aperte **ENTER**.
 O menu de níveis também pode ser aberto pela pausa ou pela tela de vitória.
 
-### Baixar o executável
+### Baixar e jogar
 
-Baixe o binário Linux mais recente em
+Baixe os pacotes mais recentes em
 [**Releases**](https://github.com/ericnix/tux-obby-3d/releases/latest).
-Ele é autocontido (PCK embutido) e não precisa do Godot instalado:
+Os executáveis são autocontidos (PCK embutido) e não precisam do Godot instalado.
 
-```bash
-chmod +x tux-obby.x86_64
-./tux-obby.x86_64
-```
+| Sistema | Arquivo | Como rodar |
+| --- | --- | --- |
+| Windows x86_64 | `Tux_Obby_3D.exe` | Baixe e execute. O arquivo não é assinado; o SmartScreen pode pedir confirmação. |
+| Linux x86_64 | `Tux_Obby_3D-x86_64.AppImage` | `chmod +x Tux_Obby_3D-x86_64.AppImage && ./Tux_Obby_3D-x86_64.AppImage` |
 
-Se você exportou o projeto localmente, o binário também fica em
-`build/tux-obby.x86_64` (a pasta `build/` não é versionada no Git).
+Se o Linux não tiver FUSE instalado, rode o AppImage com
+`--appimage-extract-and-run`. O AppImage precisa de Vulkan e de uma sessão
+gráfica (X11 ou Wayland).
+
+Se você exportou o projeto localmente, os binários também ficam em
+`build/tux-obby.x86_64` e `build/tux-obby.exe` (a pasta `build/` não é
+versionada no Git).
 
 ### Exportar novamente
 
 Instale os templates oficiais do **Godot 4.7.2** pelo editor
-(**Editor → Gerenciar Templates de Exportação**). O preset **Linux** está em
-`export_presets.cfg`. Para regerar o binário:
+(**Editor → Gerenciar Templates de Exportação**). Os presets **Linux** e
+**Windows Desktop** estão em `export_presets.cfg`. Para regerar os binários:
 
 ```bash
 godot --headless --path . --export-release "Linux" build/tux-obby.x86_64
+godot --headless --path . --export-release "Windows Desktop" build/tux-obby.exe
 ```
+
+O AppImage é montado a partir do binário Linux:
+
+```bash
+./tools/build_appimage.sh
+```
+
+O script procura `build/appimagetool-x86_64.AppImage`; baixe o
+[appimagetool](https://github.com/AppImage/AppImageKit/releases/tag/continuous)
+nesse caminho ou defina `APPIMAGETOOL=/caminho/para/appimagetool`.
 
 ### Controles
 
@@ -107,9 +123,9 @@ gramática de movimento, mas com layouts, paletas e obstáculos próprios.
 
 ```
 project.godot              configuração, inputs e autoload de áudio
-export_presets.cfg         preset de exportação Linux (x86_64, PCK embutido)
+export_presets.cfg         presets de exportação Linux e Windows (x86_64, PCK embutido)
 LICENSE                    licença MIT do projeto
-THIRD_PARTY_NOTICES.md     Godot, Liberation Sans, Tux e áudio
+THIRD_PARTY_NOTICES.md     Godot, AppImage, Liberation Sans, Tux e áudio
 scenes/
   main.tscn                cenário, sol, jogador e HUD
   player.tscn              CharacterBody3D + modelo do Tux + câmera
@@ -129,8 +145,11 @@ scripts/
 assets/
   audio/                   WAVs gerados por tools/generate_audio.py
   fonts/                   Liberation Sans (SIL OFL, ver LICENSE.txt)
+  icon.ico                 ícone do executável Windows
 docs/                      capturas usadas no README
+packaging/appimage/        AppRun, .desktop e ícone do AppImage
 tools/
+  build_appimage.sh        empacota o binário Linux em AppImage
   generate_audio.py        regenera todos os sons e a música (requer numpy)
   capture.gd / .tscn       capturas de tela para inspeção visual
   test_game.gd / .tscn     teste automatizado de jogabilidade
